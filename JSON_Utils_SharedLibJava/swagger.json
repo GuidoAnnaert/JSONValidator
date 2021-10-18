@@ -1,0 +1,1051 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Q8-KPNWE-HeartBeat-Cutover",
+    "x-ibm-name": "api-cutover",
+    "version": "0.0.1",
+    "description": "This API provides the functionality to create the cutover data",
+    "termsOfService": "",
+    "contact": {},
+    "license": {
+      "name": "Apache 2.0",
+      "url": "http://www.apache.org/licenses/LICENSE-2.0"
+    }
+  },
+  "host": "$(catalog.host)",
+  "schemes": [
+    "https"
+  ],
+  "basePath": "/api/heartbeat/cutover/v1",
+  "produces": [
+    "application/json"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "security": [
+    {
+      "ClientId": [],
+      "ClientSecret": []
+    }
+  ],
+  "securityDefinitions": {
+    "ClientSecret": {
+      "type": "apiKey",
+      "name": "X-Q8-KPNWE-clientsecret",
+      "in": "header",
+      "x-key-type": "client_secret"
+    },
+    "ClientId": {
+      "type": "apiKey",
+      "name": "X-Q8-KPNWE-clientid",
+      "in": "header",
+      "x-key-type": "client_id"
+    }
+  },
+  "x-ibm-configuration": {
+    "gateway": "datapower-api-gateway",
+    "type": "rest",
+    "phase": "realized",
+    "enforced": true,
+    "testable": true,
+    "cors": {
+      "enabled": true
+    },
+    "assembly": {
+      "execute": [
+        {
+          "switch": {
+            "version": "2.0.0",
+            "title": "switch",
+            "case": [
+              {
+                "condition": "($httpVerb() = 'POST' and $operationPath() = '/cutovers' and $header(\"Content-Type\")='application/json')",
+                "execute": [
+                  {
+                    "parse": {
+                      "version": "2.0.0",
+                      "title": "parse",
+                      "parse-settings-reference": {
+                        "default": "apic-default-parsesettings"
+                      }
+                    }
+                  },
+                  {
+                    "validate": {
+                      "version": "2.0.0",
+                      "title": "validate",
+                      "input": "message",
+                      "validate-against": "body-param"
+                    }
+                  }
+                ]
+              },
+              {
+                "condition": "($httpVerb() = 'GET' and $operationPath() = '/health' and $header(\"Content-Type\")='application/json')",
+                "execute": []
+              },
+              {
+                "condition": "$not($header(\"Content-Type\") = 'application/json')",
+                "execute": [
+                  {
+                    "throw": {
+                      "version": "2.0.0",
+                      "title": "throw unsupported mediatype",
+                      "name": "UnsupportedMediaType",
+                      "message": "The media type is unsupported"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "invoke": {
+            "version": "2.0.0",
+            "title": "call ACE",
+            "header-control": {
+              "type": "blacklist",
+              "values": []
+            },
+            "parameter-control": {
+              "type": "blacklist",
+              "values": []
+            },
+            "timeout": 60,
+            "verb": "keep",
+            "cache-response": "protocol",
+            "cache-ttl": 900,
+            "target-url": "$(kpnwe-ace-endpoint)$(request.path)",
+            "inject-proxy-headers": true,
+            "description": "call ACE"
+          }
+        }
+      ],
+      "catch": [
+        {
+          "errors": [
+            "BadRequestError",
+            "ValidateError"
+          ],
+          "execute": [
+            {
+              "map": {
+                "title": "Bad Request",
+                "version": "2.0.0",
+                "inputs": {
+                  "error": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "name": "name"
+                        },
+                        "message": {
+                          "type": "string",
+                          "name": "message"
+                        },
+                        "status": {
+                          "type": "object",
+                          "name": "status",
+                          "properties": {
+                            "code": {
+                              "type": "integer",
+                              "format": "int32",
+                              "name": "code"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "name": "reason"
+                            }
+                          }
+                        },
+                        "policyTitle": {
+                          "type": "string",
+                          "name": "policyTitle"
+                        }
+                      }
+                    },
+                    "variable": "error",
+                    "content": "application/json"
+                  },
+                  "messageId": {
+                    "schema": {
+                      "type": "string"
+                    },
+                    "variable": "messsage.headers.X-Q8-KPNWE-messageId"
+                  }
+                },
+                "outputs": {
+                  "output": {
+                    "schema": {
+                      "$ref": "#/definitions/Error"
+                    },
+                    "variable": "message.body"
+                  },
+                  "statusCode": {
+                    "schema": {
+                      "type": "integer"
+                    },
+                    "variable": "message.status.code"
+                  }
+                },
+                "actions": [
+                  {
+                    "set": "output.instance",
+                    "from": "messageId",
+                    "value": "'urn:uuid:'+ $(messageId)\n"
+                  },
+                  {
+                    "set": "output.detail",
+                    "from": "error.message"
+                  },
+                  {
+                    "set": "output.type",
+                    "from": "error.name",
+                    "value": "'about:' + $(1)",
+                    "default": "about:blank"
+                  },
+                  {
+                    "set": "output.status",
+                    "from": "error.status.code"
+                  },
+                  {
+                    "set": "output.title",
+                    "from": "error.status.reason"
+                  },
+                  {
+                    "set": "statusCode",
+                    "value": "400"
+                  },
+                  {
+                    "set": "output.step",
+                    "from": "error.policyTitle"
+                  }
+                ],
+                "options": {
+                  "mapEnablePostProcessingJSON": false,
+                  "mapEmulateV4EmptyJSONObject": false,
+                  "mapEmulateV4DefaultRequiredProps": false,
+                  "mapReferenceLimit": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "errors": [
+            "UnsupportedMediaType"
+          ],
+          "execute": [
+            {
+              "map": {
+                "title": "Bad Request",
+                "version": "2.0.0",
+                "inputs": {
+                  "error": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "name": "name"
+                        },
+                        "message": {
+                          "type": "string",
+                          "name": "message"
+                        },
+                        "status": {
+                          "type": "object",
+                          "name": "status",
+                          "properties": {
+                            "code": {
+                              "type": "integer",
+                              "format": "int32",
+                              "name": "code"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "name": "reason"
+                            }
+                          }
+                        },
+                        "policyTitle": {
+                          "type": "string",
+                          "name": "policyTitle"
+                        }
+                      }
+                    },
+                    "variable": "error",
+                    "content": "application/json"
+                  },
+                  "messageId": {
+                    "schema": {
+                      "type": "string"
+                    },
+                    "variable": "messsage.headers.X-Q8-KPNWE-messageId"
+                  }
+                },
+                "outputs": {
+                  "output": {
+                    "schema": {
+                      "$ref": "#/definitions/Error"
+                    },
+                    "variable": "message.body"
+                  },
+                  "statusCode": {
+                    "schema": {
+                      "type": "integer"
+                    },
+                    "variable": "message.status.code"
+                  }
+                },
+                "actions": [
+                  {
+                    "set": "output.instance",
+                    "from": "messageId",
+                    "value": "'urn:uuid:'+ $(messageId)\n"
+                  },
+                  {
+                    "set": "output.detail",
+                    "from": "error.message"
+                  },
+                  {
+                    "set": "output.type",
+                    "from": "error.name",
+                    "value": "'about:' + $(1)",
+                    "default": "about:blank"
+                  },
+                  {
+                    "set": "output.status",
+                    "from": "error.status.code"
+                  },
+                  {
+                    "set": "output.title",
+                    "from": "error.status.reason"
+                  },
+                  {
+                    "set": "statusCode",
+                    "value": "415"
+                  },
+                  {
+                    "set": "output.step",
+                    "from": "error.policyTitle"
+                  }
+                ],
+                "options": {
+                  "mapEnablePostProcessingJSON": false,
+                  "mapEmulateV4EmptyJSONObject": false,
+                  "mapEmulateV4DefaultRequiredProps": false,
+                  "mapReferenceLimit": 1
+                }
+              }
+            }
+          ]
+        },
+        {
+          "default": [
+            {
+              "map": {
+                "version": "2.0.0",
+                "title": "Server Error",
+                "inputs": {
+                  "error": {
+                    "schema": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "name": "name"
+                        },
+                        "message": {
+                          "type": "string",
+                          "name": "message"
+                        },
+                        "status": {
+                          "type": "object",
+                          "name": "status",
+                          "properties": {
+                            "code": {
+                              "type": "integer",
+                              "format": "int32",
+                              "name": "code"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "name": "reason"
+                            }
+                          }
+                        },
+                        "policyTitle": {
+                          "type": "string",
+                          "name": "policyTitle"
+                        }
+                      }
+                    },
+                    "variable": "error",
+                    "content": "application/json"
+                  },
+                  "messageId": {
+                    "schema": {
+                      "type": "string"
+                    },
+                    "variable": "messsage.headers.X-Q8-KPNWE-messageId"
+                  }
+                },
+                "outputs": {
+                  "output": {
+                    "schema": {
+                      "$ref": "#/definitions/Error"
+                    },
+                    "variable": "message.body"
+                  },
+                  "statusCode": {
+                    "schema": {
+                      "type": "integer"
+                    },
+                    "variable": "message.status.code"
+                  }
+                },
+                "actions": [
+                  {
+                    "set": "output.instance",
+                    "from": "messageId",
+                    "value": "'urn:uuid:'+ $(messageId)\n"
+                  },
+                  {
+                    "set": "output.detail",
+                    "from": "error.message"
+                  },
+                  {
+                    "set": "output.type",
+                    "from": "error.name",
+                    "value": "'about:' + $(1)",
+                    "default": "about:blank"
+                  },
+                  {
+                    "set": "output.status",
+                    "from": "error.status.code"
+                  },
+                  {
+                    "set": "output.title",
+                    "from": "error.status.reason"
+                  },
+                  {
+                    "set": "statusCode",
+                    "value": "500"
+                  },
+                  {
+                    "set": "output.step",
+                    "from": "error.policyTitle"
+                  }
+                ],
+                "options": {
+                  "mapEnablePostProcessingJSON": false,
+                  "mapEmulateV4EmptyJSONObject": false,
+                  "mapEmulateV4DefaultRequiredProps": false,
+                  "mapReferenceLimit": 1
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "properties": {
+      "target-url": {
+        "value": "http://itnapiib02.q8int.com:7803",
+        "description": "The URL of the target service",
+        "encoded": false
+      }
+    },
+    "activity-log": {
+      "success-content": "payload",
+      "error-content": "payload",
+      "enabled": true
+    },
+    "application-authentication": {
+      "certificate": false
+    },
+    "catalogs": {},
+    "buffering": true
+  },
+  "tags": [
+    {
+      "name": "cutover-controller",
+      "description": "Cutover Information Controller"
+    }
+  ],
+  "definitions": {
+    "Cutover": {
+      "type": "object",
+      "properties": {
+        "siteNumber": {
+          "type": "integer",
+          "format": "int64",
+          "maximum": 9999,
+          "maxLength": 4,
+          "description": "Identifier of the site Site Number and Cutover Number are unique together."
+        },
+        "cutoverNumber": {
+          "type": "integer",
+          "format": "int64",
+          "maximum": 99999,
+          "maxLength": 5,
+          "description": "Identifier of the cutover - unique per site, not unique across sites.  Site Number and Cutover Number are unique together."
+        },
+        "cutoverMoment": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Date and time when cutover was taken"
+        },
+        "cutoverType": {
+          "type": "string",
+          "enum": [
+            "AD-HOC",
+            "DAILY"
+          ],
+          "description": "Indicates whether the cutover is a daily cutover or an ad-hoc cutover"
+        },
+        "nozzleIndexes": {
+          "type": "array",
+          "description": "Nozzle Indexes",
+          "items": {
+            "$ref": "#/definitions/NozzleIndex"
+          }
+        },
+        "mopsList": {
+          "type": "array",
+          "description": "The MOPs numbers",
+          "items": {
+            "$ref": "#/definitions/Mops"
+          }
+        },
+        "shopSales": {
+          "type": "array",
+          "description": "the Shop sales numbers",
+          "items": {
+            "$ref": "#/definitions/ShopSale"
+          }
+        },
+        "dippings": {
+          "type": "array",
+          "description": "the Dippings",
+          "items": {
+            "$ref": "#/definitions/Dipping"
+          }
+        }
+      },
+      "required": [
+        "siteNumber",
+        "cutoverNumber",
+        "cutoverMoment",
+        "cutoverType",
+        "nozzleIndexes",
+        "mopsList",
+        "dippings"
+      ]
+    },
+    "NozzleIndex": {
+      "type": "object",
+      "properties": {
+        "nozzleNumber": {
+          "type": "integer",
+          "format": "int64",
+          "maximum": 999,
+          "maxLength": 3,
+          "description": "The unique identifier of the nozzle"
+        },
+        "product": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "The product that is being measured"
+        },
+        "tankGroup": {
+          "type": "integer",
+          "format": "int64",
+          "maximum": 99,
+          "maxLength": 2,
+          "description": "Tank group the Nozzle is in"
+        },
+        "hardwareMeasurement": {
+          "$ref": "#/definitions/NozzleMeasurement",
+          "description": "Measurement of the nozzle hardware"
+        },
+        "softwareMeasurement": {
+          "$ref": "#/definitions/NozzleMeasurement",
+          "description": "Measurement of the register software"
+        },
+        "currency": {
+          "type": "string",
+          "maxLength": 3,
+          "description": "The currency being used"
+        }
+      },
+      "required": [
+        "nozzleNumber",
+        "product",
+        "tankGroup",
+        "hardwareMeasurement",
+        "softwareMeasurement",
+        "currency"
+      ]
+    },
+    "NozzleMeasurement": {
+      "type": "object",
+      "properties": {
+        "amount": {
+          "type": "number",
+          "maximum": 9999999999.999,
+          "description": "Amount of the product being measured"
+        },
+        "volume": {
+          "type": "number",
+          "maximum": 99999999999.99,
+          "description": "Volume of the product being measured"
+        }
+      },
+      "required": [
+        "amount",
+        "volume"
+      ]
+    },
+    "Mops": {
+      "type": "object",
+      "properties": {
+        "terminalType": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "Type of terminal where payments are registered"
+        },
+        "terminalTypeId": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 99,
+          "maxLength": 2,
+          "description": "ID of terminal type"
+        },
+        "terminalId": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 999999,
+          "maxLength": 6,
+          "description": "ID of terminal type where payments are registered"
+        },
+        "mopConversionId": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 99999,
+          "maxLength": 5,
+          "description": "Conversion ID of the MOP"
+        },
+        "terminalCutoverNbr": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 999999,
+          "maxLength": 6,
+          "description": "Terminal cutover number"
+        },
+        "productType": {
+          "type": "string",
+          "enum": [
+            "FUEL",
+            "SHOP"
+          ],
+          "description": "Indicates whether the MOP was used to pay for fuel or shop"
+        },
+        "volume": {
+          "type": "number",
+          "maximum": 999999999999.99,
+          "description": "Volume of the sale"
+        },
+        "amount": {
+          "type": "number",
+          "maximum": 9999999999.999,
+          "description": "Amount sold"
+        },
+        "currency": {
+          "type": "string",
+          "maxLength": 3,
+          "description": "The currency being used"
+        }
+      },
+      "required": [
+        "terminalType",
+        "terminalTypeId",
+        "terminalId",
+        "mopConversionId",
+        "terminalCutoverNbr",
+        "productType",
+        "volume",
+        "amount",
+        "currency"
+      ]
+    },
+    "ShopSale": {
+      "type": "object",
+      "properties": {
+        "department": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 99,
+          "maxLength": 2,
+          "description": "Department"
+        },
+        "subDepartment": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 99,
+          "maxLength": 2,
+          "description": "SubDepartment"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 15,
+          "description": "Description of the product being sold"
+        },
+        "amount": {
+          "type": "number",
+          "maximum": 99999999999.99,
+          "description": "Amount of the product being sold"
+        },
+        "quantity": {
+          "type": "number",
+          "maximum": 99999999999.99,
+          "description": "Quantity of the product being sold"
+        },
+        "returnAmount": {
+          "type": "number",
+          "maximum": 99999999999.99,
+          "description": "In case of return, the returned amount"
+        },
+        "returnQuantity": {
+          "type": "number",
+          "maximum": 99999999999.99,
+          "description": "In case of return, the returned quantity"
+        },
+        "eftCode1": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "To do"
+        },
+        "eftCode2": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "To do"
+        },
+        "vatRate": {
+          "type": "number",
+          "maximum": 99,
+          "description": "The VAT rate having been used"
+        },
+        "vatPercentage": {
+          "type": "number",
+          "maximum": 99.99,
+          "description": "The VAT percentage having been used"
+        }
+      },
+      "required": [
+        "department",
+        "subDepartment",
+        "description",
+        "amount",
+        "quantity",
+        "vatRate",
+        "vatPercentage"
+      ]
+    },
+    "Dipping": {
+      "type": "object",
+      "properties": {
+        "tankNumber": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 99,
+          "maxLength": 2,
+          "description": "The number of the tank"
+        },
+        "tankGroup": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 99,
+          "maxLength": 2,
+          "description": "Indicates the tank group the tank is in"
+        },
+        "tankCapacity": {
+          "type": "number",
+          "description": "The tank capacity"
+        },
+        "productMeasurement": {
+          "description": "A complete measurement object for the indicated tank",
+          "$ref": "#/definitions/ProductMeasurement"
+        }
+      },
+      "required": [
+        "tankNumber",
+        "tankGroup",
+        "tankCapacity",
+        "productMeasurement"
+      ]
+    },
+    "ProductMeasurement": {
+      "type": "object",
+      "properties": {
+        "product": {
+          "type": "string",
+          "maxLength": 2,
+          "description": "Product that is being measured"
+        },
+        "waterHeight": {
+          "type": "number",
+          "maximum": 99.999,
+          "description": "Water Height"
+        },
+        "waterVolume": {
+          "type": "number",
+          "maximum": 999999.99,
+          "description": "Water Volume"
+        },
+        "productHeight": {
+          "type": "number",
+          "maximum": 99.999,
+          "description": "Product Height"
+        },
+        "productVolume": {
+          "type": "number",
+          "maximum": 999999.99,
+          "description": "Product Volume"
+        },
+        "temperature": {
+          "type": "integer",
+          "format": "int32",
+          "maximum": 999,
+          "maxLength": 3,
+          "description": "Temperature"
+        },
+        "gaugeStatus": {
+          "type": "string",
+          "enum": [
+            "OK",
+            "NOK",
+            "NO_GAUGE",
+            "ONGOING_DELIVERY",
+            "ONGOING_TRANSACTION"
+          ],
+          "description": "The status of the tank gauge"
+        }
+      },
+      "required": [
+        "product",
+        "waterHeight",
+        "waterVolume",
+        "productHeight",
+        "productVolume",
+        "temperature",
+        "gaugeStatus"
+      ]
+    },
+    "Error": {
+      "description": "This problem will be reported in response to requests that are not valid.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "This field will be used as identification of the problem but won't lead to any documentation when dereferenced. ",
+          "enum": [
+            "about:blank"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "description": "A short, human-readable summary of the problem type."
+        },
+        "status": {
+          "type": "number",
+          "description": "The HTTP status code generated by the origin server for this occurrence of the problem"
+        },
+        "detail": {
+          "type": "string",
+          "description": "A human-readable explanation specific to this occurrence of the problem."
+        },
+        "instance": {
+          "type": "string",
+          "description": "urn:uuid:<X-Q8-KPNWE-messageId>"
+        },
+        "step": {
+          "type": "string",
+          "description": "The step that went wrong"
+        }
+      }
+    },
+    "Healthcheck": {
+      "description": "result of the actuator health check.",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "description": "The runtime status of the API.",
+          "enum": [
+            "UP",
+            "DOWN"
+          ]
+        }
+      }
+    }
+  },
+  "paths": {
+    "/cutovers": {
+      "post": {
+        "tags": [
+          "cutover-controller"
+        ],
+        "summary": "create new Cutover",
+        "operationId": "createNewCutoverUsingPOST",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "X-Request-Id",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier of the request"
+          },
+          {
+            "name": "X-Correlation-Id",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "format": "uuid",
+            "description": "Correlation Id"
+          },
+          {
+            "name": "X-Receiver-Id",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "Receiver Id"
+          },
+          {
+            "name": "X-Sender-Id",
+            "in": "header",
+            "required": false,
+            "type": "string",
+            "description": "Sender Id"
+          },
+          {
+            "in": "body",
+            "name": "cutover",
+            "description": "cutover information",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/Cutover"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "The request has been accepted."
+          },
+          "400": {
+            "description": "The value of one or more request parameters is not valid.",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "401": {
+            "description": "unauthorized",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "415": {
+            "description": "unsupported media type",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "429": {
+            "description": "too many requests",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "internal server error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "cutover-controller"
+        ],
+        "summary": "health check of the API",
+        "operationId": "getHealthCheck",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/xml",
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "The request has been accepted.",
+            "schema": {
+              "$ref": "#/definitions/Healthcheck"
+            }
+          },
+          "400": {
+            "description": "The value of one or more request parameters is not valid.",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "401": {
+            "description": "unauthorized",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "404": {
+            "description": "not found",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "415": {
+            "description": "unsupported media type",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "429": {
+            "description": "too many requests",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          },
+          "500": {
+            "description": "internal server error",
+            "schema": {
+              "$ref": "#/definitions/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

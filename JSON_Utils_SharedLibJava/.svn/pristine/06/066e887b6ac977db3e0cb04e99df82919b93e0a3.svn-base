@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "Car": {
+      "type": "object",
+      "properties": {
+        "brand": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "brand",
+        "model"
+      ]
+    }
+  },
+  "required": [
+    "Car"
+  ]
+}
+
